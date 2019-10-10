@@ -4,14 +4,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: |
   Initialiser template used to bring up the install ServiceCatalog-Puppet
-  {"version": "0.37.2", "framework": "servicecatalog-puppet", "role": "initialiser"}
+  {"version": "latest", "framework": "servicecatalog-puppet", "role": "initialiser"}
 
 Parameters:
-  Version:
-    Type: String
-    Default: "0.37.2"
-    Description: |
-      Which version of aws-service-catalog-puppet to install
   EnabledRegions:
     Type: String
     Description: |
@@ -34,15 +29,15 @@ Parameters:
       - True
       - False
     Default: True
+  OrgIAMRoleArn:
+    Type: String
+    Default: "None"
+
+Conditions:
+  NotUsingOrgs: !Equals [!Ref OrgIAMRoleArn, "None" ]
+  UsingOrgs: !Not [Condition: NotUsingOrgs]
 
 Resources:
-  Param:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: service-catalog-puppet-initialiser-version
-      Type: String
-      Value: !Ref Version
-
   InitialiserRole:
     Type: AWS::IAM::Role
     Properties:
@@ -62,6 +57,7 @@ Resources:
 
   InitialiserProject:
     Type: AWS::CodeBuild::Project
+    Condition: NotUsingOrgs
     Properties:
       Name: servicecatalog-product-puppet-initialiser
       Description: "Initialiser for the framework"
@@ -73,10 +69,6 @@ Resources:
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/python:3.7.1
         EnvironmentVariables:
-          - Name: VERSION
-            Type: PLAINTEXT
-            Value: !Ref Version
-
           - Name: ENABLED_REGIONS
             Type: PLAINTEXT
             Value: !Join [ ',', !Split [ ', ', !Ref EnabledRegions]]
@@ -96,6 +88,7 @@ Resources:
           - Name: PUPPET_ACCOUNT_ID
             Type: PLAINTEXT
             Value: !Ref AWS::AccountId
+
       Source:
         Type: NO_SOURCE
         BuildSpec: |
@@ -103,7 +96,64 @@ Resources:
           phases:
             install:
               commands:
-                - pip install aws-service-catalog-puppet==${VERSION}
+                - pip install aws-service-catalog-puppet --upgrade
+                - servicecatalog-puppet --info set-regions ${ENABLED_REGIONS}
+                - servicecatalog-puppet set-config-value should_collect_cloudformation_events ${SHOULD_COLLECT_CLOUDFORMATION_EVENTS}
+                - servicecatalog-puppet set-config-value should_forward_events_to_eventbridge ${SHOULD_FORWARD_EVENTS_TO_EVENTBRIDGE}
+                - servicecatalog-puppet set-config-value should_forward_failures_to_opscenter ${SHOULD_FORWARD_FAILURES_TO_OPSCENTER}
+                - servicecatalog-puppet bootstrap-spoke ${PUPPET_ACCOUNT_ID}
+            build:
+              commands:
+                - servicecatalog-puppet --info bootstrap
+
+      TimeoutInMinutes: 60
+
+  InitialiserProjectForOrgs:
+    Type: AWS::CodeBuild::Project
+    Condition: UsingOrgs
+    Properties:
+      Name: servicecatalog-product-puppet-initialiser-for-orgs
+      Description: "Initialiser for the framework"
+      ServiceRole: !GetAtt InitialiserRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: linuxContainer
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/python:3.7.1
+        EnvironmentVariables:
+          - Name: ENABLED_REGIONS
+            Type: PLAINTEXT
+            Value: !Join [ ',', !Split [ ', ', !Ref EnabledRegions]]
+
+          - Name: SHOULD_COLLECT_CLOUDFORMATION_EVENTS
+            Type: PLAINTEXT
+            Value: !Ref ShouldCollectCloudformationEvents
+
+          - Name: SHOULD_FORWARD_EVENTS_TO_EVENTBRIDGE
+            Type: PLAINTEXT
+            Value: !Ref ShouldForwardEventsToEventbridge
+
+          - Name: SHOULD_FORWARD_FAILURES_TO_OPSCENTER
+            Type: PLAINTEXT
+            Value: !Ref ShouldForwardFailuresToOpscenter
+
+          - Name: PUPPET_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Ref AWS::AccountId
+
+          - Name: ORG_IAM_ROLE_ARN
+            Type: PLAINTEXT
+            Value: !Ref OrgIAMRoleArn
+
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                - pip install aws-service-catalog-puppet --upgrade
                 - servicecatalog-puppet --info set-regions ${ENABLED_REGIONS}
                 - servicecatalog-puppet set-config-value should_collect_cloudformation_events ${SHOULD_COLLECT_CLOUDFORMATION_EVENTS}
                 - servicecatalog-puppet set-config-value should_forward_events_to_eventbridge ${SHOULD_FORWARD_EVENTS_TO_EVENTBRIDGE}
@@ -116,5 +166,9 @@ Resources:
       TimeoutInMinutes: 60
 
 Outputs:
-  Version:
-    Value: !GetAtt Param.Value
+  ServiceCatalogPuppetRepoConsoleURL:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codecommit/repositories/ServiceCatalogPuppet/browse"
+  ServiceCatalogPuppetRepoCloneURLSSH:
+    Value: !Sub "ssh://git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/ServiceCatalogPuppet"
+  ServiceCatalogPuppetRepoCloneURLHTTPS:
+    Value: !Sub "https://git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/ServiceCatalogPuppet"

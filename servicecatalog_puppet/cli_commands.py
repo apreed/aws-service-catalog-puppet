@@ -396,14 +396,17 @@ def set_org_iam_role_arn(org_iam_role_arn):
     click.echo("Uploaded config")
 
 
-def bootstrap_org_master(puppet_account_id):
+def bootstrap_org_master(puppet_account_id, quiet):
     with betterboto_client.ClientContextManager(
             'cloudformation',
     ) as cloudformation:
         org_iam_role_arn = cli_command_helpers._do_bootstrap_org_master(
             puppet_account_id, cloudformation, cli_command_helpers.get_puppet_version()
         )
-    click.echo("Bootstrapped org master, org-iam-role-arn: {}".format(org_iam_role_arn))
+    if quiet:
+        click.echo(org_iam_role_arn)
+    else:
+        click.echo("Bootstrapped org master, org-iam-role-arn: {}".format(org_iam_role_arn))
 
 
 def quick_start():
