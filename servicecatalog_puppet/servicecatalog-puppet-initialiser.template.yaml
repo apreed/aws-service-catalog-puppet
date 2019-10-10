@@ -158,6 +158,7 @@ Resources:
                 - servicecatalog-puppet set-config-value should_collect_cloudformation_events ${SHOULD_COLLECT_CLOUDFORMATION_EVENTS}
                 - servicecatalog-puppet set-config-value should_forward_events_to_eventbridge ${SHOULD_FORWARD_EVENTS_TO_EVENTBRIDGE}
                 - servicecatalog-puppet set-config-value should_forward_failures_to_opscenter ${SHOULD_FORWARD_FAILURES_TO_OPSCENTER}
+                - servicecatalog-puppet set-org-iam-role-arn ${ORG_IAM_ROLE_ARN}
                 - servicecatalog-puppet bootstrap-spoke ${PUPPET_ACCOUNT_ID}
             build:
               commands:
